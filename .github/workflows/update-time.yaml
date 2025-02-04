@@ -1,0 +1,82 @@
+name: Update Timestamp
+
+on:
+  workflow_dispatch:
+
+jobs:
+  update-argo:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Compare timestamps
+        id: compare_timestamps
+        run: |
+          FILE_TIMESTAMP=$(cat TIMESTAMP)
+          NEW_TIMESTAMP=$(date +%s)
+
+          if [ $NEW_TIMESTAMP -gt $FILE_TIMESTAMP ]; then
+            echo "update_needed=true" >> $GITHUB_OUTPUT
+            echo "updated_timestamp=$NEW_TIMESTMAP" >> $GITHUB_OUTPUT
+          else
+            echo "update_needed=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Configure git
+        if: ${{ steps.compare_timestamps.outputs.update_needed == 'true' }}
+        # https://github.com/orgs/community/discussions/26560
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+
+      - name: Create branch
+        id: create_branch
+        if: ${{ steps.compare_timestamps.outputs.update_needed == 'true' }}
+        env:
+          BRANCH_NAME: updates/timestamp-${{ steps.compare_timestamps.outputs.updated_timestamp }}
+        run: |
+          git fetch origin --no-tags --quiet 'refs/heads/updates/*:refs/remotes/origin/updates/*'
+
+          if [ "$(git rev-parse --quiet --verify origin/$BRANCH_NAME)" ]; then
+            echo "Branch $BRANCH_NAME already exists on origin."
+            echo "pr_needed=false" >> $GITHUB_OUTPUT
+          else
+            git checkout -b "$BRANCH_NAME"
+            git push origin $BRANCH_NAME
+            echo "pr_needed=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Commit change
+        if: ${{ steps.compare_timestamps.outputs.update_needed == 'true' && steps.create_branch.outputs.pr_needed == 'true'}}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BRANCH_NAME: updates/timestamp-${{ steps.compare_timestamps.outputs.updated_timestamp }}
+          LATEST_TIMESTAMP: ${{ steps.compare_timestamps.outputs.updated_timestamp }}
+        run: |
+          echo "$LATEST_TIMESTAMP" > TIMESTAMP
+          SHA=$(git rev-parse $BRANCH_NAME:TIMESTAMP)
+          CONTENT=$(base64 -i TIMESTAMP)
+          gh api --method PUT /repos/:owner/:repo/contents/TIMESTAMP \
+            --field message="Update TIMESTAMP to $LATEST_TIMESTAMP" \
+            --field content="$CONTENT" \
+            --field encoding="base64" \
+            --field branch="$BRANCH_NAME" \
+            --field sha="$SHA"
+
+      - name: Create pull request
+        if: ${{ steps.compare_timestamps.outputs.update_needed == 'true' && steps.create_branch.outputs.pr_needed == 'true'}}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BRANCH_NAME: updates/timestamp-${{ steps.compare_timestamps.outputs.updated_timestamp }}
+        run: |
+          gh pr create \
+            --title "Update TIMESTAMP to ${{ steps.compare_timestamps.outputs.updated_timestamp }}" \
+            --body "Updating the timestamp in the TIMESTAMP file" \
+            --base "main" \
+            --head "$BRANCH_NAME" \
+            --label "dependencies"

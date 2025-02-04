@@ -1,0 +1,12 @@
+name: PR Success Check
+
+on:
+  pull_request:
+
+jobs:
+  success-check:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Always succeed
+        run: echo "Success!"
