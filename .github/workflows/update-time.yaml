@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  update-argo:
+  update-timestamp:
     runs-on: ubuntu-latest
     defaults:
       run:
