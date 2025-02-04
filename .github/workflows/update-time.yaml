@@ -80,5 +80,4 @@ jobs:
             --title "Update TIMESTAMP to ${{ steps.compare_timestamps.outputs.updated_timestamp }}" \
             --body "Updating the timestamp in the TIMESTAMP file" \
             --base "main" \
-            --head "$BRANCH_NAME" \
-            --label "dependencies"
+            --head "$BRANCH_NAME"
